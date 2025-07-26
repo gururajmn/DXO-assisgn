@@ -1,0 +1,8 @@
+# Terraform files to ignore
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# OS/System files
+*.log
+.DS_Store
