@@ -1,0 +1,100 @@
+- hosts: web
+  become: yes
+  vars:
+    db_host: terraform-20250725121600130800000001.c8dg8qas40ap.us-east-1.rds.amazonaws.com
+    db_user: dbadmin
+    db_pass: Guru12345
+    db_name: mydb
+
+  collections:
+    - community.postgresql
+
+  tasks:
+    - name: Install Apache
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Apache
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Install PostgreSQL client
+      apt:
+        name: postgresql-client
+        state: present
+        update_cache: yes
+
+    - name: Install psycopg2 dependency
+      apt:
+        name: python3-psycopg2
+        state: present
+        update_cache: yes
+
+    - name: Ensure the DB exists
+      community.postgresql.postgresql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+
+    - name: Ensure the table exists
+      community.postgresql.postgresql_query:
+        db: "{{ db_name }}"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        query: "CREATE TABLE IF NOT EXISTS messages (id SERIAL PRIMARY KEY, content TEXT);"
+
+    - name: Insert dynamic message
+      community.postgresql.postgresql_query:
+        db: "{{ db_name }}"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        query: "INSERT INTO messages (content) VALUES ('Hello world by Gururaj');"
+
+    - name: Fetch latest message
+      community.postgresql.postgresql_query:
+        db: "{{ db_name }}"
+        login_host: "{{ db_host }}"
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_pass }}"
+        query: "SELECT content FROM messages ORDER BY id DESC LIMIT 1;"
+      register: result
+
+    - name: DEBUG result
+      debug:
+        var: result
+
+    - name: Render index.html with DB message
+      copy:
+        dest: /var/www/html/index.html
+        content: |
+          <html><body><h1>{{ result.query_result[0].content }}</h1></body></html>
+
+    - name: Ensure apache2.service.d directory exists
+      file:
+        path: /etc/systemd/system/apache2.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Ensure apache2 always restarts
+      copy:
+        dest: /etc/systemd/system/apache2.service.d/restart.conf
+        content: |
+          [Service]
+          Restart=always
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+
+    - name: Restart apache2
+      service:
+        name: apache2
+        state: restarted
+
